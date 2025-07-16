@@ -114,21 +114,6 @@ You’ll need your own [OpenAI API Key](https://platform.openai.com/account/api-
 
 ---
 
-## 📦 Future Improvements
-
-- Fine-grained control over model temperature and prompt tuning
-- Authentication for multi-user access
-- VSCode plugin for inline commenting
-- Support for other languages like Java or TypeScript
-
----
-
-## 🧑‍💻 Author
-
-**Kenji (Daniel Llewellyn)**  
-_“Godspeed and keep your guard up, kid.”_
-
----
 
 ## 🪪 License
 
