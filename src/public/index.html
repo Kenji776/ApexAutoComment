@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<title>Apex Auto Comment & Docs Generator</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<script type="text/javascript" language="javascript" src="scripts.js"></script>
+		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet" />
+		<link href="styles.css" rel="stylesheet" />
+	</head>
+	<body>
+		<div class="card">
+			<h1>Apex Auto Comment & Documentation Generator</h1>
+
+			<p>
+				This utility will automatically comment your Salesforce Apex classes and generate documentation from the resulting commented code. Simply select a folder containing Apex classes, INCLUDING the metadata files, select if you want
+				comments, documentation, or both and let it run. Be aware that the document generation depends on specifically formatted comments using the javadoc standard.
+			</p>
+			<input type="file" id="fileInput" webkitdirectory directory multiple />
+
+			<div class="mode-group">
+				<label for="modeSelect" class="label">Processing Mode</label>
+				<select id="modeSelect">
+					<option value="comments">🧠 Comments Only</option>
+					<option value="docs">📘 Documentation Only</option>
+					<option value="both" selected>⚡ Comments + Docs</option>
+				</select>
+			</div>
+			<div class="mode-group">
+				<div id="variablesHeader" class="collapsible-header">
+					<span>Prompt Variables</span>
+					<span id="variablesToggle" class="arrow">▶</span>
+				</div>
+
+				<div id="variablesPanel" class="collapsible-panel">
+					<div id="variablesContainer">
+						<div class="var-field">
+							<label for="AUTHOR_NAME" class="label">Author Name</label>
+							<input type="text" id="AUTHOR_NAME" placeholder="e.g. Kenji" class="var-input" />
+						</div>
+						<!-- add more var-field blocks here as needed -->
+					</div>
+				</div>
+			</div>
+			<div class="mode-group">
+				<div id="Options" class="collapsible-header">
+					<span>Options</span>
+					<span id="modelToggle" class="arrow">▶</span>
+				</div>
+
+				<div id="modelPanel" class="collapsible-panel">
+					<div id="modelContainer">
+						<label for="modelSelect" class="label">Choose Model</label>
+						<select id="modelSelect" class="var-input">
+							<option value="gpt-4o" selected>⚙️ GPT-4o (Balanced, Fast)</option>
+							<option value="gpt-4o-mini">💡 GPT-4o-mini (Lightweight, Cheaper)</option>
+							<option value="gpt-4.1">🧠 GPT-4.1 (Reasoning, Most Capable)</option>
+							<option value="gpt-4.1-mini">🚀 GPT-4.1-mini (Experimental)</option>
+						</select>
+						<p class="muted-note">
+							Tip: GPT-4.1 is the most accurate for Apex docs, GPT-4o is faster and cheaper.
+						</p>
+					</div>
+				</div>
+			</div>
+
+			<button onclick="uploadAndProcess()">Upload & Process</button>
+			<div id="status">Waiting for input...</div>
+
+			<progress id="progressBar" value="0" max="100"></progress>
+			<div id="progressLabel"></div>
+
+			<pre id="log-output"></pre>
+			Developed By Kenji776
+		</div>
+	</body>
+</html>

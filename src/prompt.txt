@@ -21,7 +21,7 @@ Output Format:
 - Return only the modified class file, with the new comment blocks inserted in the correct places.
 - Do not wrap the entire response in additional code fences or markdown.
 - Do not summarize the changes; provide only the updated code file.
-- At the class level block always include the @author as "Slalom Consulting"
+- At the class level block always include the @author as {AUTHOR_NAME}
 - If other tags exist, such as @group maintain them, do not remove them.
 
 Assume the input file is a complete Apex class. If parts of the class are unclear, make reasonable assumptions based on typical Salesforce development practices.

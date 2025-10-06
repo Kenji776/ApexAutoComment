@@ -1,5 +1,9 @@
+// --------------------------------------------------
+//  Apex Auto Comment & Docs Generator Server
+// --------------------------------------------------
 const express = require("express");
-const { processFiles } = require("./processor");
+const { processFiles } = require("./processor"); // comment generator
+const { processFiles: generateDocs } = require("./generateDocs"); // docs generator
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
@@ -7,94 +11,192 @@ const fsExtra = require("fs-extra");
 const archiver = require("archiver");
 const bodyParser = require("body-parser");
 const cors = require("cors");
+const { getApexFiles } = require("./fileScanner");
 
 const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-app.use(express.static(path.join(__dirname, "..", "public")));
+// --------------------------------------------------
+// 🔧 Path Setup (Docker-safe)
+// --------------------------------------------------
+// Determine base directory — project root in both Docker and local runs
+let BASE_DIR = path.resolve(__dirname); // always /src
 
-const INPUT_DIR = path.join(__dirname, "..", "input");
-const OUTPUT_DIR = path.join(__dirname, "..", "output");
 
-// Ensure directories exist
-fs.mkdirSync(INPUT_DIR, { recursive: true });
-fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+const INPUT_DIR = path.join(BASE_DIR, "input");
+const OUTPUT_DIR = path.join(BASE_DIR, "output");
+const PUBLIC_DIR = path.join(BASE_DIR, "public");
+const SRC_DIR = path.join(OUTPUT_DIR, "src");
+const DOCS_DIR = path.join(OUTPUT_DIR, "docs");
+const MARKDOWN_DIR = path.join(DOCS_DIR, "markdown");
+const HTML_DIR = path.join(DOCS_DIR, "html");
+const FINAL_ZIP = path.join(OUTPUT_DIR, "final_output.zip");
 
-/** --- File Upload Endpoint --- */
+[INPUT_DIR, OUTPUT_DIR, SRC_DIR, DOCS_DIR, MARKDOWN_DIR, HTML_DIR].forEach((dir) =>
+  fs.mkdirSync(dir, { recursive: true })
+);
+
+console.log("📂 BASE_DIR:", BASE_DIR);
+console.log("📂 PUBLIC_DIR:", PUBLIC_DIR);
+
+// Ensure required directories exist
+[INPUT_DIR, OUTPUT_DIR, SRC_DIR, DOCS_DIR, MARKDOWN_DIR, HTML_DIR, PUBLIC_DIR].forEach((dir) => fs.mkdirSync(dir, { recursive: true }));
+
+// --------------------------------------------------
+// 🧱 Static Frontend
+// --------------------------------------------------
+app.use(express.static(PUBLIC_DIR));
+
+// --------------------------------------------------
+// 📤 File Upload Endpoint
+// --------------------------------------------------
 const storage = multer.diskStorage({
 	destination: (req, file, cb) => cb(null, INPUT_DIR),
 	filename: (req, file, cb) => cb(null, file.originalname),
 });
 const upload = multer({ storage });
 let logClients = [];
+
 app.post("/upload", upload.array("files"), (req, res) => {
-	if (!req.files.length)
-		return res.status(400).send({ error: "No files uploaded." });
+	if (!req.files.length) return res.status(400).send({ error: "No files uploaded." });
 	res.send({ message: `${req.files.length} file(s) uploaded.` });
 });
 
-/** --- Process Endpoint (already provided) --- */
-const { getApexFiles } = require("./fileScanner"); // assumes this exists
-
-
+// --------------------------------------------------
+// ⚙️  Process Endpoint
+// --------------------------------------------------
 app.post("/process", async (req, res) => {
 	res.set("Access-Control-Allow-Origin", "*");
-
-	const inputPath = INPUT_DIR; // You control this — no need to rely on body param
+	const mode = req.query.mode || "both"; // comments, docs, or both
+	const llmPromptVariables = req.body.variables || {};
+	const model = req.body.model || "gpt-4o";
 
 	try {
+		// 🔍 Gather Apex files
 		let filesToProcess = [];
-
-		if (fs.statSync(inputPath).isDirectory()) {
-			console.log(`🔍 Scanning directory: ${inputPath}`);
-			filesToProcess = getApexFiles(inputPath);
-		} else if (inputPath.endsWith(".cls")) {
-			filesToProcess = [inputPath];
+		if (fs.statSync(INPUT_DIR).isDirectory()) {
+			console.log(`🔍 Scanning directory: ${INPUT_DIR}`);
+			filesToProcess = getApexFiles(INPUT_DIR);
+		} else if (INPUT_DIR.endsWith(".cls")) {
+			filesToProcess = [INPUT_DIR];
 		} else {
-			return res
-				.status(400)
-				.send({ error: "Path must be a folder or .cls file." });
+			return res.status(400).send({ error: "Path must be a folder or .cls file." });
 		}
 
-		if (filesToProcess.length === 0) {
-			return res
-				.status(400)
-				.send({ error: "No Apex class files found." });
+		if (!filesToProcess.length) return res.status(400).send({ error: "No Apex class files found." });
+
+		const PROCESSED_SRC_DIR = path.join(OUTPUT_DIR, "src");
+		await fsExtra.ensureDir(PROCESSED_SRC_DIR);
+
+		console.log(`🗂 Using SRC_DIR = ${PROCESSED_SRC_DIR}`);
+		console.log(`🗂 Using DOCS_DIR = ${DOCS_DIR}`);
+
+		// --------------------------------------------------
+		// 🧩 Step 0: Copy metadata XMLs so ApexDocs can find them
+		// --------------------------------------------------
+		console.log("📂 Copying metadata (.cls-meta.xml) files to SRC_DIR...");
+		for (const clsFile of filesToProcess) {
+			const metaFile = clsFile.replace(/\.cls$/i, ".cls-meta.xml");
+			if (fs.existsSync(metaFile)) {
+				const destFile = path.join(PROCESSED_SRC_DIR, path.basename(metaFile));
+				await fsExtra.copy(metaFile, destFile);
+				console.log(`   ✅ Copied: ${path.basename(metaFile)}`);
+			} else {
+				console.warn(`   ⚠️ No metadata found for ${path.basename(clsFile)}`);
+			}
 		}
 
-		await processFiles(filesToProcess, OUTPUT_DIR, INPUT_DIR);
-		res.send({ message: `✅ Processed ${filesToProcess.length} file(s).` });
+		// --------------------------------------------------
+		// 🧠 Step 1: Generate Comments
+		// --------------------------------------------------
+		if (mode === "comments" || mode === "both") {
+			console.log("🧠 Running comment generation...");
+			await processFiles(filesToProcess, PROCESSED_SRC_DIR, INPUT_DIR, llmPromptVariables, model);
+			console.log("✅ Comment generation complete.");
+		}
+
+		// If "docs" mode only, copy raw .cls files into PROCESSED_SRC_DIR
+		if (mode === "docs") {
+			for (const clsFile of filesToProcess) {
+				const clsDest = path.join(PROCESSED_SRC_DIR, path.basename(clsFile));
+				await fsExtra.copy(clsFile, clsDest);
+				console.log(`   ✅ Copied class file: ${path.basename(clsFile)}`);
+			}
+		}
+
+		// --------------------------------------------------
+		// 📘 Step 2: Generate Documentation
+		// --------------------------------------------------
+		if (mode === "docs" || mode === "both") {
+			console.log("📘 Running documentation generation...");
+			await generateDocs(PROCESSED_SRC_DIR, MARKDOWN_DIR, HTML_DIR, DOCS_DIR);
+			console.log("✅ Documentation generation complete.");
+
+			// 🧾 Copy log into docs folder for traceability
+			const logSrc = path.join(BASE_DIR, "src", "generateDocs.log");
+			const logDest = path.join(DOCS_DIR, "generateDocs.log");
+			if (fs.existsSync(logSrc)) {
+				await fsExtra.copyFile(logSrc, logDest);
+				console.log("🧾 Copied generateDocs.log into docs folder.");
+			} else {
+				console.warn("⚠️ generateDocs.log not found — skipping copy.");
+			}
+		}
+
+		// --------------------------------------------------
+		// 📦 Step 3: Create Final ZIP
+		// --------------------------------------------------
+		if (fs.existsSync(FINAL_ZIP)) {
+			console.log("🧹 Removing old ZIP...");
+			await fsExtra.remove(FINAL_ZIP);
+		}
+
+		console.log("📦 Creating new ZIP...");
+		const archive = archiver("zip", { zlib: { level: 9 } });
+		const output = fs.createWriteStream(FINAL_ZIP);
+		archive.pipe(output);
+
+		if (fs.existsSync(PROCESSED_SRC_DIR)) archive.directory(PROCESSED_SRC_DIR, "src");
+		if (fs.existsSync(DOCS_DIR)) archive.directory(DOCS_DIR, "docs");
+
+		await archive.finalize();
+
+		output.on("close", () => {
+			console.log(`✅ Final ZIP ready (${archive.pointer()} bytes)`);
+			res.download(FINAL_ZIP, "final_output.zip", (err) => {
+				if (err) console.error("Error sending ZIP:", err);
+			});
+		});
+
+		output.on("error", (err) => {
+			console.error("Error writing ZIP:", err);
+			res.status(500).send({ error: "Failed to create ZIP." });
+		});
 	} catch (err) {
-		console.error(err);
-		res.status(500).send({ error: "Processing failed." });
+		console.error("❌ PROCESS FAILED:", err);
+		res.status(500).send({ error: "Processing failed", details: err.message });
 	}
 });
 
-/** --- Zip Output Directory --- */
-app.get("/download-zip", (req, res) => {
-    res.set("Access-Control-Allow-Origin", "*");
-	const archive = archiver("zip", { zlib: { level: 9 } });
-	res.attachment("processed_output.zip");
-	archive.pipe(res);
-	archive.directory(OUTPUT_DIR, false);
-	archive.finalize();
-});
-
-/** --- Cleanup Input Directory --- */
+// --------------------------------------------------
+// 🧹 Cleanup Endpoint
+// --------------------------------------------------
 app.post("/cleanup-input", async (req, res) => {
-    res.set("Access-Control-Allow-Origin", "*");
+	res.set("Access-Control-Allow-Origin", "*");
 	try {
 		await fsExtra.emptyDir(INPUT_DIR);
-        await fsExtra.emptyDir(OUTPUT_DIR);
-		res.send({ message: "Input folder cleaned." });
+		await fsExtra.emptyDir(OUTPUT_DIR);
+		res.send({ message: "Input and output folders cleaned." });
 	} catch (err) {
 		console.error(err);
-		res.status(500).send({ error: "Failed to clean input folder." });
+		res.status(500).send({ error: "Failed to clean input/output folders." });
 	}
 });
 
-
+// --------------------------------------------------
+// 📡 Live Log Streaming (SSE)
+// --------------------------------------------------
 app.get("/logs", (req, res) => {
 	res.setHeader("Content-Type", "text/event-stream");
 	res.setHeader("Cache-Control", "no-cache");
@@ -109,11 +211,9 @@ app.get("/logs", (req, res) => {
 	});
 });
 
-// Send a message to all listening clients
 function sendLogToClients(message) {
-	console._logOriginal("Sending data to client");
-	console._logOriginal(message);
-	const event = `data: ${message.replace(/\n/g, "")}\n\n`;
+	const clean = typeof message === "string" ? message : JSON.stringify(message);
+	const event = `data: ${clean.replace(/\n/g, "")}\n\n`;
 	for (const client of logClients) {
 		client.write(event);
 	}
@@ -121,22 +221,30 @@ function sendLogToClients(message) {
 
 function createLiveLogger() {
 	return (msg) => {
-		if (typeof msg !== "string") {
-			msg = JSON.stringify(msg);
+		console._logOriginal(msg);
+		try {
+			sendLogToClients(msg);
+		} catch (err) {
+			console._logOriginal("⚠️ Error streaming log to client:", err);
 		}
-		sendLogToClients(msg);
-		console._logOriginal(msg); // optional: still print to console
 	};
 }
 
-// Save the original
-console._logOriginal = console.log;
+if (!console._logOriginal) {
+	console._logOriginal = console.log;
+	console.log = createLiveLogger();
+}
 
-// Overwrite global console.log with your live-aware version
-console.log = createLiveLogger();
+// --------------------------------------------------
+// 🌐 Root Route
+// --------------------------------------------------
+app.use(express.static(PUBLIC_DIR));
+app.get("/", (req, res) => {
+	res.sendFile(path.join(PUBLIC_DIR, "index.html"));
+});
 
-/** --- Serve Frontend (Optional) --- */
-app.use(express.static(path.join(__dirname, "public"))); // if HTML is placed in /public
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+// --------------------------------------------------
+// 🚀 Start Server
+// --------------------------------------------------
+const PORT = parseInt(process.env.PORT, 10) || 3010;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
