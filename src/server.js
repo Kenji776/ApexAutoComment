@@ -12,7 +12,7 @@ const archiver = require("archiver");
 const bodyParser = require("body-parser");
 const cors = require("cors");
 const { getApexFiles } = require("./fileScanner");
-
+const { v4: uuidv4 } = require("uuid");
 const app = express();
 app.use(cors());
 app.use(bodyParser.json());
@@ -33,6 +33,7 @@ const MARKDOWN_DIR = path.join(DOCS_DIR, "markdown");
 const HTML_DIR = path.join(DOCS_DIR, "html");
 const FINAL_ZIP = path.join(OUTPUT_DIR, "final_output.zip");
 
+
 [INPUT_DIR, OUTPUT_DIR, SRC_DIR, DOCS_DIR, MARKDOWN_DIR, HTML_DIR].forEach((dir) =>
   fs.mkdirSync(dir, { recursive: true })
 );
@@ -52,120 +53,124 @@ app.use(express.static(PUBLIC_DIR));
 // 📤 File Upload Endpoint
 // --------------------------------------------------
 const storage = multer.diskStorage({
-	destination: (req, file, cb) => cb(null, INPUT_DIR),
+	destination: async (req, file, cb) => {
+		try {
+			if (!req.jobId) req.jobId = uuidv4(); // 🔑 Create a unique job ID
+			const jobInputDir = path.join(INPUT_DIR, req.jobId);
+			await fsExtra.ensureDir(jobInputDir);
+			cb(null, jobInputDir);
+		} catch (err) {
+			cb(err);
+		}
+	},
 	filename: (req, file, cb) => cb(null, file.originalname),
 });
 const upload = multer({ storage });
 let logClients = [];
 
 app.post("/upload", upload.array("files"), (req, res) => {
-	if (!req.files.length) return res.status(400).send({ error: "No files uploaded." });
-	res.send({ message: `${req.files.length} file(s) uploaded.` });
+	if (!req.files || !req.files.length) {
+		return res.status(400).send({ error: "No files uploaded." });
+	}
+
+	res.send({
+		message: `${req.files.length} file(s) uploaded successfully.`,
+		jobId: req.jobId, // 🔑 send this back to frontend
+	});
 });
 
-// --------------------------------------------------
-// ⚙️  Process Endpoint
-// --------------------------------------------------
 app.post("/process", async (req, res) => {
 	res.set("Access-Control-Allow-Origin", "*");
-	const mode = req.query.mode || "both"; // comments, docs, or both
-	const llmPromptVariables = req.body.variables || {};
-	const model = req.body.model || "gpt-4o";
+
+	const mode = req.query.mode || "both";
+	const { variables = {}, model = "gpt-4o", jobId } = req.body;
+
+	if (!jobId) {
+		return res.status(400).send({ error: "Missing jobId. Please upload first." });
+	}
+
+	// Define per-job directories
+	const jobInputDir = path.join(INPUT_DIR, jobId);
+	const jobOutputDir = path.join(OUTPUT_DIR, jobId);
+	const jobSrcDir = path.join(jobOutputDir, "src");
+	const jobDocsDir = path.join(jobOutputDir, "docs");
+	const jobMarkdownDir = path.join(jobDocsDir, "markdown");
+	const jobHtmlDir = path.join(jobDocsDir, "html");
+	const jobZip = path.join(jobOutputDir, "final_output.zip");
 
 	try {
+		await fsExtra.ensureDir(jobSrcDir);
+		await fsExtra.ensureDir(jobDocsDir);
+		await fsExtra.ensureDir(jobMarkdownDir);
+		await fsExtra.ensureDir(jobHtmlDir);
+
+		console.log(`📂 Processing job ${jobId}`);
+		console.log(`🧾 Input: ${jobInputDir}`);
+		console.log(`🧾 Output: ${jobOutputDir}`);
+
 		// 🔍 Gather Apex files
-		let filesToProcess = [];
-		if (fs.statSync(INPUT_DIR).isDirectory()) {
-			console.log(`🔍 Scanning directory: ${INPUT_DIR}`);
-			filesToProcess = getApexFiles(INPUT_DIR);
-		} else if (INPUT_DIR.endsWith(".cls")) {
-			filesToProcess = [INPUT_DIR];
-		} else {
-			return res.status(400).send({ error: "Path must be a folder or .cls file." });
-		}
-
-		if (!filesToProcess.length) return res.status(400).send({ error: "No Apex class files found." });
-
-		const PROCESSED_SRC_DIR = path.join(OUTPUT_DIR, "src");
-		await fsExtra.ensureDir(PROCESSED_SRC_DIR);
-
-		console.log(`🗂 Using SRC_DIR = ${PROCESSED_SRC_DIR}`);
-		console.log(`🗂 Using DOCS_DIR = ${DOCS_DIR}`);
+		const filesToProcess = getApexFiles(jobInputDir);
+		if (!filesToProcess.length) return res.status(400).send({ error: "No Apex class files found in uploaded job folder." });
 
 		// --------------------------------------------------
-		// 🧩 Step 0: Copy metadata XMLs so ApexDocs can find them
+		// 🧩 Step 0: Copy meta files
 		// --------------------------------------------------
-		console.log("📂 Copying metadata (.cls-meta.xml) files to SRC_DIR...");
 		for (const clsFile of filesToProcess) {
 			const metaFile = clsFile.replace(/\.cls$/i, ".cls-meta.xml");
 			if (fs.existsSync(metaFile)) {
-				const destFile = path.join(PROCESSED_SRC_DIR, path.basename(metaFile));
-				await fsExtra.copy(metaFile, destFile);
-				console.log(`   ✅ Copied: ${path.basename(metaFile)}`);
-			} else {
-				console.warn(`   ⚠️ No metadata found for ${path.basename(clsFile)}`);
+				await fsExtra.copy(metaFile, path.join(jobSrcDir, path.basename(metaFile)));
 			}
 		}
 
 		// --------------------------------------------------
-		// 🧠 Step 1: Generate Comments
+		// 🧠 Step 1: Comment Generation
 		// --------------------------------------------------
 		if (mode === "comments" || mode === "both") {
-			console.log("🧠 Running comment generation...");
-			await processFiles(filesToProcess, PROCESSED_SRC_DIR, INPUT_DIR, llmPromptVariables, model);
-			console.log("✅ Comment generation complete.");
-		}
-
-		// If "docs" mode only, copy raw .cls files into PROCESSED_SRC_DIR
-		if (mode === "docs") {
-			for (const clsFile of filesToProcess) {
-				const clsDest = path.join(PROCESSED_SRC_DIR, path.basename(clsFile));
-				await fsExtra.copy(clsFile, clsDest);
-				console.log(`   ✅ Copied class file: ${path.basename(clsFile)}`);
-			}
+			await processFiles(filesToProcess, jobSrcDir, jobInputDir, variables, model);
+			console.log("✅ Comment generation complete");
 		}
 
 		// --------------------------------------------------
-		// 📘 Step 2: Generate Documentation
+		// 📘 Step 2: Documentation Generation
 		// --------------------------------------------------
 		if (mode === "docs" || mode === "both") {
-			console.log("📘 Running documentation generation...");
-			await generateDocs(PROCESSED_SRC_DIR, MARKDOWN_DIR, HTML_DIR, DOCS_DIR);
-			console.log("✅ Documentation generation complete.");
-
-			// 🧾 Copy log into docs folder for traceability
-			const logSrc = path.join(BASE_DIR, "src", "generateDocs.log");
-			const logDest = path.join(DOCS_DIR, "generateDocs.log");
-			if (fs.existsSync(logSrc)) {
-				await fsExtra.copyFile(logSrc, logDest);
-				console.log("🧾 Copied generateDocs.log into docs folder.");
-			} else {
-				console.warn("⚠️ generateDocs.log not found — skipping copy.");
-			}
+			await generateDocs(jobSrcDir, jobMarkdownDir, jobHtmlDir, jobDocsDir);
+			console.log("✅ Documentation generation complete");
 		}
 
 		// --------------------------------------------------
-		// 📦 Step 3: Create Final ZIP
+		// 📦 Step 3: Zip Results
 		// --------------------------------------------------
-		if (fs.existsSync(FINAL_ZIP)) {
-			console.log("🧹 Removing old ZIP...");
-			await fsExtra.remove(FINAL_ZIP);
-		}
+		if (fs.existsSync(jobZip)) await fsExtra.remove(jobZip);
 
-		console.log("📦 Creating new ZIP...");
+		console.log("📦 Creating final ZIP...");
 		const archive = archiver("zip", { zlib: { level: 9 } });
-		const output = fs.createWriteStream(FINAL_ZIP);
+		const output = fs.createWriteStream(jobZip);
 		archive.pipe(output);
 
-		if (fs.existsSync(PROCESSED_SRC_DIR)) archive.directory(PROCESSED_SRC_DIR, "src");
-		if (fs.existsSync(DOCS_DIR)) archive.directory(DOCS_DIR, "docs");
+		if (fs.existsSync(jobSrcDir)) archive.directory(jobSrcDir, "src");
+		if (fs.existsSync(jobDocsDir)) archive.directory(jobDocsDir, "docs");
 
 		await archive.finalize();
 
-		output.on("close", () => {
-			console.log(`✅ Final ZIP ready (${archive.pointer()} bytes)`);
-			res.download(FINAL_ZIP, "final_output.zip", (err) => {
-				if (err) console.error("Error sending ZIP:", err);
+		output.on("close", async () => {
+			console.log(`✅ Job ${jobId} ZIP ready (${archive.pointer()} bytes)`);
+
+			res.download(jobZip, "final_output.zip", async (err) => {
+				if (err) {
+					console.error("Error sending ZIP:", err);
+					res.status(500).send({ error: "Failed to send ZIP." });
+				}
+
+				// 🧹 Cleanup after sending
+				try {
+					console.log(`🧹 Cleaning up job ${jobId} directories...`);
+					await fsExtra.remove(jobInputDir);
+					await fsExtra.remove(jobOutputDir);
+					console.log(`✅ Job ${jobId} cleaned up successfully.`);
+				} catch (cleanupErr) {
+					console.warn(`⚠️ Cleanup failed for job ${jobId}:`, cleanupErr);
+				}
 			});
 		});
 
@@ -174,23 +179,8 @@ app.post("/process", async (req, res) => {
 			res.status(500).send({ error: "Failed to create ZIP." });
 		});
 	} catch (err) {
-		console.error("❌ PROCESS FAILED:", err);
+		console.error(`❌ PROCESS FAILED [${jobId}]:`, err);
 		res.status(500).send({ error: "Processing failed", details: err.message });
-	}
-});
-
-// --------------------------------------------------
-// 🧹 Cleanup Endpoint
-// --------------------------------------------------
-app.post("/cleanup-input", async (req, res) => {
-	res.set("Access-Control-Allow-Origin", "*");
-	try {
-		await fsExtra.emptyDir(INPUT_DIR);
-		await fsExtra.emptyDir(OUTPUT_DIR);
-		res.send({ message: "Input and output folders cleaned." });
-	} catch (err) {
-		console.error(err);
-		res.status(500).send({ error: "Failed to clean input/output folders." });
 	}
 });
 

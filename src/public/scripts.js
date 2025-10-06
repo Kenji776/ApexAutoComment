@@ -34,7 +34,77 @@ function stopLogStream() {
 
 document.addEventListener("DOMContentLoaded", () => {
 	buildPanels();
+	document.getElementById("fileInput").addEventListener("change", validateFilePairs);
+	const uploadBtn = document.getElementById("uploadBtn");
+	uploadBtn.disabled = true; // ensure disabled on load
 });
+
+function validateFilePairs() {
+	const files = Array.from(document.getElementById("fileInput").files);
+	const uploadBtn = document.getElementById("uploadBtn");
+	const status = document.getElementById("status");
+
+	if (!files.length) {
+		status.textContent = "⚠️ Please select a folder containing Apex class files.";
+		uploadBtn.disabled = true;
+		return;
+	}
+
+	// Separate into relevant sets
+	const clsFiles = new Set();
+	const metaFiles = new Set();
+	const invalidFiles = [];
+
+	for (const file of files) {
+		const name = file.name;
+
+		if (name.endsWith(".cls")) {
+			const base = name.replace(/\.cls$/, "");
+			clsFiles.add(base);
+		} else if (name.endsWith(".cls-meta.xml")) {
+			const base = name.replace(/\.cls-meta\.xml$/, "");
+			metaFiles.add(base);
+		} else {
+			invalidFiles.push(name);
+		}
+	}
+
+	// 🚫 Reject if any non-.cls or non-.cls-meta.xml file found
+	if (invalidFiles.length > 0) {
+		alert(`❌ Invalid files detected. Only .cls and .cls-meta.xml files are allowed.\n\nInvalid files:\n${invalidFiles.join("\n")}`);
+		status.textContent = "❌ Directory contains unsupported files.";
+		uploadBtn.disabled = true;
+		return;
+	}
+
+	// 🔎 Verify pairing consistency
+	const missingPairs = [];
+	for (const base of clsFiles) {
+		if (!metaFiles.has(base)) missingPairs.push(`${base}.cls-meta.xml`);
+	}
+	for (const base of metaFiles) {
+		if (!clsFiles.has(base)) missingPairs.push(`${base}.cls`);
+	}
+
+	// 🚫 No valid pairs at all
+	if (clsFiles.size === 0 && metaFiles.size === 0) {
+		status.textContent = "⚠️ No Apex class files found.";
+		uploadBtn.disabled = true;
+		return;
+	}
+
+	// 🚫 Some pairs missing
+	if (missingPairs.length > 0) {
+		alert(`❌ The selected directory must contain paired files (.cls and .cls-meta.xml) with matching names.\nMissing counterparts:\n\n${missingPairs.join("\n")}`);
+		status.textContent = "⚠️ Missing file pairs detected.";
+		uploadBtn.disabled = true;
+		return;
+	}
+
+	// ✅ All good
+	status.textContent = `✅ Found ${clsFiles.size} valid Apex class pair${clsFiles.size > 1 ? "s" : ""}. Ready to upload.`;
+	uploadBtn.disabled = false;
+}
 
 function buildPanels() {
 	// Automatically find and wire all collapsible sections
@@ -54,7 +124,7 @@ async function uploadAndProcess() {
 	startLogStream();
 	const files = document.getElementById("fileInput").files;
 	const mode = document.getElementById("modeSelect").value;
-	const model = document.getElementById("modelSelect").value; // 🧠 new
+	const model = document.getElementById("modelSelect").value;
 	const status = document.getElementById("status");
 
 	if (!files.length) {
@@ -67,11 +137,16 @@ async function uploadAndProcess() {
 
 	status.textContent = "📤 Uploading files...";
 	const uploadResponse = await fetch("/upload", { method: "POST", body: formData });
+
 	if (!uploadResponse.ok) {
 		status.textContent = "❌ File upload failed.";
 		stopLogStream();
 		return;
 	}
+
+	const uploadData = await uploadResponse.json();
+	const jobId = uploadData.jobId; // 🔑 store for processing step
+	console.log("Job ID:", jobId);
 
 	// collect variable values
 	const variables = {};
@@ -83,7 +158,7 @@ async function uploadAndProcess() {
 	const processResponse = await fetch(`/process?mode=${mode}`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ variables, model }), // 🧠 send model too
+		body: JSON.stringify({ variables, model, jobId }), // ✅ now includes jobId
 	});
 
 	if (!processResponse.ok) {
@@ -101,9 +176,6 @@ async function uploadAndProcess() {
 	document.body.appendChild(a);
 	a.click();
 	a.remove();
-
-	status.textContent = "🧹 Cleaning up...";
-	await fetch("/cleanup-input", { method: "POST" });
 
 	status.textContent = "✅ Done!";
 	stopLogStream();

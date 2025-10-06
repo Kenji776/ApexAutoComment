@@ -64,11 +64,11 @@
 				</div>
 			</div>
 
-			<button onclick="uploadAndProcess()">Upload & Process</button>
+			<button id="uploadBtn" onclick="uploadAndProcess()" disabled>Upload & Process</button>
 			<div id="status">Waiting for input...</div>
 
 			<progress id="progressBar" value="0" max="100"></progress>
-			<div id="progressLabel"></div>
+			<div id="progressLabel" style="display:none"></div>
 
 			<pre id="log-output"></pre>
 			Developed By Kenji776
