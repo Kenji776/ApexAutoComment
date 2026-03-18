@@ -165,7 +165,6 @@ pre#log-output {
 	text-align: center;
 	color: var(--muted);
 	font-size: 0.9rem;
-	min-height:50px;
 }
 .collapsible-header {
 	display: flex;
@@ -226,6 +225,22 @@ pre#log-output {
 	font-size: 0.8rem;
 	color: var(--muted);
 	margin-top: 0.5rem;
+}
+
+.sample-link {
+	font-size: 0.82rem;
+	color: var(--muted);
+	margin: 0.4rem 0 0;
+	text-align: center;
+}
+
+.sample-link a {
+	color: var(--accent);
+	text-decoration: none;
+}
+
+.sample-link a:hover {
+	text-decoration: underline;
 }
 
 #uploadBtn {
