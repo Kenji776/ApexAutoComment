@@ -9,69 +9,111 @@
 		<link href="styles.css" rel="stylesheet" />
 	</head>
 	<body>
-		<div class="card">
-			<h1>Apex Auto Comment & Documentation Generator</h1>
+		<div class="page-layout">
+			<div class="card">
+				<h1>Apex Auto Comment & Documentation Generator</h1>
 
-			<p>
-				This utility will automatically comment your Salesforce Apex classes and generate documentation from the resulting commented code. Simply select a folder containing Apex classes, INCLUDING the metadata files, select if you want
-				comments, documentation, or both and let it run. Be aware that the document generation depends on specifically formatted comments using the javadoc standard.
-			</p>
-			<input type="file" id="fileInput" webkitdirectory directory multiple />
+				<p>
+					This utility will automatically comment your Salesforce Apex classes and generate documentation from the resulting commented code. Simply select a folder containing Apex classes, INCLUDING the metadata files, select if you want
+					comments, documentation, or both and let it run. Be aware that the document generation depends on specifically formatted comments using the javadoc standard if not using comment geneation. All uploaded code and produced files are deleted promptly after processing.
+				</p>
 
-			<div class="mode-group">
-				<label for="modeSelect" class="label">Processing Mode</label>
-				<select id="modeSelect">
-					<option value="comments">🧠 Comments Only</option>
-					<option value="docs">📘 Documentation Only</option>
-					<option value="both" selected>⚡ Comments + Docs</option>
-				</select>
-			</div>
-			<div class="mode-group">
-				<div id="variablesHeader" class="collapsible-header">
-					<span>Prompt Variables</span>
-					<span id="variablesToggle" class="arrow">▶</span>
+				<div class="token-usage-bar" id="tokenUsageBar">
+					<div class="token-usage-header">
+						<span class="token-usage-label">Daily Token Usage</span>
+						<span class="token-usage-count" id="tokenUsageCount">Loading...</span>
+					</div>
+					<div class="token-usage-track">
+						<div class="token-usage-fill" id="tokenUsageFill" style="width: 0%"></div>
+					</div>
+					<div class="token-usage-note" id="tokenUsageNote"></div>
+				</div>
+				<div class="token-lockout" id="tokenLockout" style="display:none">
+					Daily token limit reached. Please try again tomorrow.
 				</div>
 
-				<div id="variablesPanel" class="collapsible-panel">
-					<div id="variablesContainer">
-						<div class="var-field">
-							<label for="AUTHOR_NAME" class="label">Author Name</label>
-							<input type="text" id="AUTHOR_NAME" placeholder="e.g. Kenji" class="var-input" />
+				<input type="file" id="fileInput" webkitdirectory directory multiple />
+
+				<div class="mode-group">
+					<label for="modeSelect" class="label">Processing Mode</label>
+					<select id="modeSelect">
+						<option value="comments">🧠 Comments Only</option>
+						<option value="docs">📘 Documentation Only</option>
+						<option value="both" selected>⚡ Comments + Docs</option>
+					</select>
+				</div>
+				<div class="mode-group">
+					<div id="variablesHeader" class="collapsible-header">
+						<span>Prompt Variables</span>
+						<span id="variablesToggle" class="arrow">▶</span>
+					</div>
+
+					<div id="variablesPanel" class="collapsible-panel">
+						<div id="variablesContainer">
+							<div class="var-field">
+								<label for="AUTHOR_NAME" class="label">Author Name</label>
+								<input type="text" id="AUTHOR_NAME" placeholder="e.g. Kenji" class="var-input" />
+							</div>
 						</div>
-						<!-- add more var-field blocks here as needed -->
+					</div>
+				</div>
+				<div class="mode-group">
+					<div id="Options" class="collapsible-header">
+						<span>Options</span>
+						<span id="modelToggle" class="arrow">▶</span>
+					</div>
+
+					<div id="modelPanel" class="collapsible-panel">
+						<div id="modelContainer">
+							<label for="modelSelect" class="label">Choose Model</label>
+							<select id="modelSelect" class="var-input">
+								<option value="claude-sonnet-4-20250514" selected>⚡ Claude Sonnet 4 (Balanced, Fast)</option>
+								<option value="claude-sonnet-4-6">🚀 Claude Sonnet 4.6 (Latest Sonnet)</option>
+								<option value="claude-haiku-4-5-20251001">💡 Claude Haiku 4.5 (Lightweight, Cheapest)</option>
+								<option value="claude-opus-4-6">🧠 Claude Opus 4.6 (Most Capable)</option>
+							</select>
+							<p class="muted-note">
+								Tip: Sonnet 4 is a great default for Apex docs. Opus 4.6 is the most accurate but slower and pricier. Haiku 4.5 is fastest and cheapest for large batches.
+							</p>
+						</div>
+					</div>
+				</div>
+
+				<button id="uploadBtn" onclick="uploadAndProcess()" disabled>Upload & Process</button>
+				<div id="status">Waiting for input...</div>
+
+				<progress id="progressBar" value="0" max="100"></progress>
+				<div id="progressLabel" style="display:none"></div>
+
+				<div class="spinner-area" id="spinnerArea" style="display:none">
+					<div class="spinner"></div>
+					<span class="spinner-text" id="spinnerText">Generating documentation...</span>
+				</div>
+
+				<pre id="log-output"></pre>
+
+				<div class="footer-section">
+					<span class="footer-credit">Developed by Kenji776</span>
+					<div class="donate-ask">
+						<p>Tokens cost money — help keep this tool running!</p>
+						<div class="donate-links">
+							<a href="https://paypal.me/Kenji776" target="_blank" rel="noopener" class="donate-btn paypal">PayPal <span>@Kenji776</span></a>
+							<a href="https://cash.app/$Kenji776" target="_blank" rel="noopener" class="donate-btn cashapp">Cash App <span>$Kenji776</span></a>
+							<a href="https://venmo.com/Kenji77" target="_blank" rel="noopener" class="donate-btn venmo">Venmo <span>@Kenji77</span></a>
+						</div>
 					</div>
 				</div>
 			</div>
-			<div class="mode-group">
-				<div id="Options" class="collapsible-header">
-					<span>Options</span>
-					<span id="modelToggle" class="arrow">▶</span>
-				</div>
 
-				<div id="modelPanel" class="collapsible-panel">
-					<div id="modelContainer">
-						<label for="modelSelect" class="label">Choose Model</label>
-						<select id="modelSelect" class="var-input">
-							<option value="gpt-4o" selected>⚙️ GPT-4o (Balanced, Fast)</option>
-							<option value="gpt-4o-mini">💡 GPT-4o-mini (Lightweight, Cheaper)</option>
-							<option value="gpt-4.1">🧠 GPT-4.1 (Reasoning, Most Capable)</option>
-							<option value="gpt-4.1-mini">🚀 GPT-4.1-mini (Experimental)</option>
-						</select>
-						<p class="muted-note">
-							Tip: GPT-4.1 is the most accurate for Apex docs, GPT-4o is faster and cheaper.
-						</p>
-					</div>
+			<div class="file-panel" id="filePanel">
+				<div class="file-panel-header">
+					<h3>Selected Files</h3>
+					<span class="file-panel-count" id="filePanelCount">0 pairs</span>
+				</div>
+				<div class="file-panel-list" id="filePanelList">
+					<div class="file-panel-empty">Select a folder to see files here</div>
 				</div>
 			</div>
-
-			<button id="uploadBtn" onclick="uploadAndProcess()" disabled>Upload & Process</button>
-			<div id="status">Waiting for input...</div>
-
-			<progress id="progressBar" value="0" max="100"></progress>
-			<div id="progressLabel" style="display:none"></div>
-
-			<pre id="log-output"></pre>
-			Developed By Kenji776
 		</div>
 	</body>
 </html>

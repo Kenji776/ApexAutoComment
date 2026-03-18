@@ -7,6 +7,8 @@
 	--muted: #8b949e;
 	--error: #f85149;
 	--success: #3fb950;
+	--border: #30363d;
+	--hover-bg: #1a1f27;
 }
 
 * {
@@ -25,9 +27,25 @@ body {
 	padding: 2rem;
 }
 
+/* ─── Page layout (card + file panel) ──────────────────── */
+
+.page-layout {
+	display: flex;
+	gap: 1.5rem;
+	max-width: 1100px;
+	width: 100%;
+	align-items: flex-start;
+}
+
+.page-layout > .card {
+	flex: 1 1 0;
+	min-width: 0;
+	max-width: none;
+}
+
 .card {
 	background: var(--panel);
-	border: 1px solid #30363d;
+	border: 1px solid var(--border);
 	border-radius: 16px;
 	padding: 2.5rem;
 	width: 100%;
@@ -47,7 +65,7 @@ input[type="file"] {
 	display: block;
 	margin: 1rem auto;
 	background: var(--bg);
-	border: 1px solid #30363d;
+	border: 1px solid var(--border);
 	padding: 0.75rem;
 	border-radius: 8px;
 	color: var(--text);
@@ -57,7 +75,7 @@ input[type="file"] {
 
 select {
 	background: var(--bg);
-	border: 1px solid #30363d;
+	border: 1px solid var(--border);
 	color: var(--text);
 	padding: 0.6rem 1rem;
 	border-radius: 8px;
@@ -120,7 +138,7 @@ progress::-moz-progress-bar {
 pre#log-output {
 	margin-top: 1.2rem;
 	background: #0d1117;
-	border: 1px solid #30363d;
+	border: 1px solid var(--border);
 	border-radius: 8px;
 	padding: 1rem;
 	font-family: monospace;
@@ -147,13 +165,14 @@ pre#log-output {
 	text-align: center;
 	color: var(--muted);
 	font-size: 0.9rem;
+	min-height:50px;
 }
 .collapsible-header {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
 	background: var(--panel);
-	border: 1px solid #30363d;
+	border: 1px solid var(--border);
 	border-radius: 8px;
 	padding: 0.6rem 1rem;
 	cursor: pointer;
@@ -164,7 +183,7 @@ pre#log-output {
 }
 
 .collapsible-header:hover {
-	background: #1a1f27;
+	background: var(--hover-bg);
 }
 
 .arrow {
@@ -190,7 +209,7 @@ pre#log-output {
 
 .var-input {
 	background: var(--bg);
-	border: 1px solid #30363d;
+	border: 1px solid var(--border);
 	color: var(--text);
 	padding: 0.6rem 1rem;
 	border-radius: 8px;
@@ -232,4 +251,322 @@ pre#log-output {
 	box-shadow: none;
 	transform: none;
 	opacity: 0.6;
+}
+
+/* ─── Spinner (docs/packaging phase) ───────────────── */
+
+.spinner-area {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.75rem;
+	margin: 1.25rem 0;
+	padding: 0.75rem 1rem;
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+}
+
+.spinner {
+	width: 20px;
+	height: 20px;
+	border: 3px solid var(--border);
+	border-top-color: var(--accent);
+	border-radius: 50%;
+	animation: spin 0.8s linear infinite;
+	flex-shrink: 0;
+}
+
+@keyframes spin {
+	to { transform: rotate(360deg); }
+}
+
+.spinner-text {
+	font-size: 0.88rem;
+	color: var(--muted);
+}
+
+/* ─── Token usage bar ──────────────────────────────── */
+
+.token-usage-bar {
+	margin: 1rem 0;
+	padding: 0.75rem 1rem;
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+}
+
+.token-usage-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 0.4rem;
+}
+
+.token-usage-label {
+	font-size: 0.8rem;
+	font-weight: 600;
+	color: var(--muted);
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+}
+
+.token-usage-count {
+	font-size: 0.8rem;
+	color: var(--text);
+	font-variant-numeric: tabular-nums;
+}
+
+.token-usage-track {
+	width: 100%;
+	height: 8px;
+	background: #21262d;
+	border-radius: 4px;
+	overflow: hidden;
+}
+
+.token-usage-fill {
+	height: 100%;
+	border-radius: 4px;
+	background: var(--accent);
+	transition: width 0.4s ease, background-color 0.4s ease;
+}
+
+.token-usage-fill.warning {
+	background: #d29922;
+}
+
+.token-usage-fill.critical {
+	background: var(--error);
+}
+
+.token-usage-note {
+	font-size: 0.72rem;
+	color: var(--muted);
+	margin-top: 0.35rem;
+}
+
+.token-lockout {
+	margin: 0.75rem 0;
+	padding: 0.75rem 1rem;
+	background: rgba(248, 81, 73, 0.1);
+	border: 1px solid var(--error);
+	border-radius: 8px;
+	color: var(--error);
+	font-size: 0.9rem;
+	font-weight: 600;
+	text-align: center;
+}
+
+/* ─── File panel (right sidebar) ───────────────────────── */
+
+.file-panel {
+	flex: 0 0 320px;
+	background: var(--panel);
+	border: 1px solid var(--border);
+	border-radius: 16px;
+	padding: 1rem 1.25rem;
+	max-height: 80vh;
+	display: flex;
+	flex-direction: column;
+	box-shadow: 0 0 30px rgba(0, 0, 0, 0.3);
+}
+
+.file-panel-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 0.75rem;
+	padding-bottom: 0.5rem;
+	border-bottom: 1px solid var(--border);
+}
+
+.file-panel-header h3 {
+	margin: 0;
+	font-size: 0.95rem;
+	font-weight: 600;
+	color: var(--accent);
+}
+
+.file-panel-count {
+	font-size: 0.8rem;
+	color: var(--muted);
+	background: var(--bg);
+	padding: 2px 8px;
+	border-radius: 10px;
+	border: 1px solid var(--border);
+}
+
+.file-panel-list {
+	overflow-y: auto;
+	flex: 1;
+}
+
+/* Scrollbar styling for file list */
+.file-panel-list::-webkit-scrollbar {
+	width: 6px;
+}
+.file-panel-list::-webkit-scrollbar-track {
+	background: transparent;
+}
+.file-panel-list::-webkit-scrollbar-thumb {
+	background: var(--border);
+	border-radius: 3px;
+}
+.file-panel-list::-webkit-scrollbar-thumb:hover {
+	background: var(--muted);
+}
+
+.file-pair-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 0.45rem 0.5rem;
+	border-radius: 6px;
+	transition: background 0.15s;
+}
+
+.file-pair-row:hover {
+	background: var(--hover-bg);
+}
+
+.file-pair-info {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.file-pair-name {
+	font-size: 0.85rem;
+	font-weight: 500;
+	color: var(--text);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.file-pair-meta {
+	font-size: 0.72rem;
+	color: var(--muted);
+}
+
+.file-pair-meta.missing {
+	color: var(--error);
+}
+
+.file-pair-remove {
+	background: none;
+	border: none;
+	cursor: pointer;
+	color: var(--muted);
+	font-size: 1.1rem;
+	line-height: 1;
+	padding: 4px 6px;
+	border-radius: 4px;
+	transition: color 0.15s, background 0.15s;
+	flex-shrink: 0;
+	margin-left: 0.5rem;
+	width: auto;
+	min-width: 0;
+}
+
+.file-pair-remove:hover {
+	color: var(--error);
+	background: rgba(248, 81, 73, 0.1);
+}
+
+.file-panel-empty {
+	text-align: center;
+	color: var(--muted);
+	font-size: 0.85rem;
+	padding: 2rem 0;
+}
+
+/* ─── Responsive: stack on narrow screens ──────────────── */
+
+@media (max-width: 860px) {
+	.page-layout {
+		flex-direction: column;
+		align-items: stretch;
+	}
+	.file-panel {
+		flex: none;
+		width: 100%;
+		max-height: 300px;
+		order: -1; /* show file list above the card on mobile */
+	}
+}
+
+/* ─── Footer & donation section ────────────────────────── */
+
+.footer-section {
+	margin-top: 1.5rem;
+	padding-top: 1rem;
+	border-top: 1px solid var(--border);
+	text-align: center;
+}
+
+.footer-credit {
+	font-size: 0.8rem;
+	color: var(--muted);
+}
+
+.donate-ask {
+	margin-top: 0.75rem;
+}
+
+.donate-ask p {
+	font-size: 0.82rem;
+	color: var(--muted);
+	margin: 0 0 0.6rem;
+}
+
+.donate-links {
+	display: flex;
+	gap: 0.5rem;
+	justify-content: center;
+	flex-wrap: wrap;
+}
+
+.donate-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.3rem;
+	padding: 0.4rem 0.75rem;
+	border-radius: 6px;
+	font-size: 0.78rem;
+	font-weight: 600;
+	text-decoration: none;
+	color: #fff;
+	transition: opacity 0.2s, transform 0.1s;
+	width: auto;
+	min-width: 0;
+}
+
+.donate-btn span {
+	font-weight: 400;
+	opacity: 0.85;
+}
+
+.donate-btn:hover {
+	opacity: 0.85;
+	transform: scale(1.03);
+	background: inherit;
+}
+
+.donate-btn.paypal {
+	background: #0070ba;
+}
+
+.donate-btn.cashapp {
+	background: #00d64b;
+	color: #111;
+}
+
+.donate-btn.cashapp span {
+	color: #111;
+}
+
+.donate-btn.venmo {
+	background: #3d95ce;
 }

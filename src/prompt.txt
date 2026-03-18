@@ -18,31 +18,30 @@ Formatting & Style Guidelines:
 - Do NOT use any emoji
 
 Output Format:
-- Return only the modified class file, with the new comment blocks inserted in the correct places.
+- Return ONLY raw Javadoc comment blocks. Never wrap output in markdown code fences (```), backticks, or any other markdown formatting.
+- Each comment block must start with /** and end with */ — nothing else before or after.
 - Do not wrap the entire response in additional code fences or markdown.
-- Do not summarize the changes; provide only the updated code file.
+- Do not summarize the changes; provide only the comment block.
 - At the class level block always include the @author as {AUTHOR_NAME}
 - If other tags exist, such as @group maintain them, do not remove them.
 
-Assume the input file is a complete Apex class. If parts of the class are unclear, make reasonable assumptions based on typical Salesforce development practices.
+Assume the input file is a complete Apex class. If parts of the class are unclear, make reasonable assumptions based on typical Salesforce development practices. Fix any syntax errors that would prevent it from compiling correctly.
 
-Example format:
+Example of correct output:
 
 /**
- * [Brief class description.]
- * [Additional details if necessary.]
+ * Brief class description.
+ * Additional details if necessary.
+ *
+ * @author {AUTHOR_NAME}
  */
-public class ExampleClass {
 
-    /**
-     * [Brief method description.]
-     *
-     * @param paramName [Description of paramName]
-     * @return [Description of return value]
-     */
-    public ReturnType exampleMethod(Type paramName) {
-        ...
-    }
-}
+Example of INCORRECT output (never do this):
+
+```java
+/**
+ * Brief class description.
+ */
+```
 
 Begin processing the following Apex class:

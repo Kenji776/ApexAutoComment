@@ -1,6 +1,6 @@
 // src/functionExtractor.js
 
-const fs = require('fs');
+const fs = require("fs");
 
 /**
  * Extracts all top-level methods (static or instance) from an Apex class file.
@@ -10,107 +10,161 @@ const fs = require('fs');
  * @returns {Array<{ startLine: number, endLine: number, methodName: string, declarationBlock: string, bodyContent: string }>}
  */
 function extractFunctions(fileContent) {
-    const lines = fileContent.split('\n');
-    const functionBlocks = [];
+	const lines = fileContent.split("\n");
+	const functionBlocks = [];
 
-    let insideBlockComment = false;
-    let insideMethod = false;
-    let braceCount = 0;
+	let insideBlockComment = false;
+	let insideMethod = false;
+	let foundOpenBrace = false; // tracks if we've seen the first { yet
+	let braceCount = 0;
 
-    let startLine = -1;
-    let currentDeclarationLines = [];
-    let currentBodyLines = [];
-    let methodName = '';
+	let startLine = -1;
+	let currentDeclarationLines = [];
+	let currentBodyLines = [];
+	let methodName = "";
 
-    const methodSignatureRegex = /\b(public|private|protected|global)\b[\s\S]*?\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/;
+	const methodSignatureRegex = /\b(public|private|protected|global)\b[\s\S]*?\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/;
 
-    for (let i = 0; i < lines.length; i++) {
-        const trimmed = lines[i].trim();
+	for (let i = 0; i < lines.length; i++) {
+		const trimmed = lines[i].trim();
 
-        // Track block comments
-        if (trimmed.startsWith('/**')) insideBlockComment = true;
-        if (insideBlockComment) {
-            if (trimmed.endsWith('*/')) insideBlockComment = false;
-            continue;
-        }
+		// Track block comments
+		if (trimmed.startsWith("/**")) insideBlockComment = true;
+		if (insideBlockComment) {
+			if (trimmed.endsWith("*/")) insideBlockComment = false;
+			continue;
+		}
 
-        // Skip single-line comments
-        if (trimmed.startsWith('//')) continue;
+		// Skip single-line comments
+		if (trimmed.startsWith("//")) continue;
 
-        // Detect start of a method block: decorator or method signature
-        if (!insideMethod && (trimmed.startsWith('@') || methodSignatureRegex.test(trimmed))) {
-            if (startLine === -1) {
-                startLine = i; // First line of the method block (could be a decorator or the method signature)
-            }
+		// Detect start of a method block: decorator or method signature
+		if (!insideMethod && (trimmed.startsWith("@") || methodSignatureRegex.test(trimmed))) {
+			if (startLine === -1) {
+				startLine = i;
+			}
 
-            currentDeclarationLines.push(lines[i]);
+			currentDeclarationLines.push(lines[i]);
 
-            // If this line is the method signature, extract the method name and prepare to capture the body
-            const match = trimmed.match(methodSignatureRegex);
-            if (match) {
-                methodName = match[2];
-                insideMethod = true;
+			const match = trimmed.match(methodSignatureRegex);
+			if (match) {
+				methodName = match[2];
+				insideMethod = true;
+				foundOpenBrace = false;
 
-                // Start counting braces from here
-                braceCount += (trimmed.match(/{/g) || []).length;
-                braceCount -= (trimmed.match(/}/g) || []).length;
+				// Check if the opening brace is on this same line
+				if (trimmed.includes("{")) {
+					foundOpenBrace = true;
+					braceCount += (trimmed.match(/{/g) || []).length;
+					braceCount -= (trimmed.match(/}/g) || []).length;
 
-                // Handle one-line methods (no braces)
-                if (braceCount === 0 && !trimmed.includes('{')) {
-                    functionBlocks.push({
-                        startLine,
-                        endLine: i,
-                        methodName,
-                        declarationBlock: currentDeclarationLines.join('\n'),
-                        bodyContent: ''
-                    });
+					// Single-line method with body on same line (rare but possible)
+					if (braceCount <= 0) {
+						functionBlocks.push({
+							startLine,
+							endLine: i,
+							methodName,
+							declarationBlock: currentDeclarationLines.join("\n"),
+							bodyContent: "",
+						});
 
-                    // Reset
-                    insideMethod = false;
-                    startLine = -1;
-                    currentDeclarationLines = [];
-                    methodName = '';
-                }
-            }
+						insideMethod = false;
+						foundOpenBrace = false;
+						startLine = -1;
+						currentDeclarationLines = [];
+						methodName = "";
+						braceCount = 0;
+					}
+				}
+				// If no brace on this line, we'll keep scanning for it
+			}
 
-            continue;
-        }
+			continue;
+		}
 
-        // If we haven’t yet started a method block, ignore lines that aren’t decorators or method signatures
-        if (!insideMethod && startLine !== -1) {
-            // Decorator followed by a blank line or unrelated code means reset
-            startLine = -1;
-            currentDeclarationLines = [];
-        }
+		// If we haven't yet started a method block, ignore lines that aren't decorators or method signatures
+		if (!insideMethod && startLine !== -1) {
+			startLine = -1;
+			currentDeclarationLines = [];
+		}
 
-        // Inside the method body
-        if (insideMethod) {
-            currentBodyLines.push(lines[i]);
+		// Inside the method but haven't found the opening brace yet
+		// These are continuation lines of the declaration (multi-line params, closing paren, etc.)
+		if (insideMethod && !foundOpenBrace) {
+			currentDeclarationLines.push(lines[i]);
 
-            braceCount += (trimmed.match(/{/g) || []).length;
-            braceCount -= (trimmed.match(/}/g) || []).length;
+			if (trimmed.includes("{")) {
+				foundOpenBrace = true;
+				braceCount += (trimmed.match(/{/g) || []).length;
+				braceCount -= (trimmed.match(/}/g) || []).length;
 
-            if (braceCount <= 0) {
-                functionBlocks.push({
-                    startLine,
-                    endLine: i,
-                    methodName,
-                    declarationBlock: currentDeclarationLines.join('\n'),
-                    bodyContent: currentBodyLines.join('\n')
-                });
+				if (braceCount <= 0) {
+					functionBlocks.push({
+						startLine,
+						endLine: i,
+						methodName,
+						declarationBlock: currentDeclarationLines.join("\n"),
+						bodyContent: "",
+					});
 
-                // Reset
-                insideMethod = false;
-                startLine = -1;
-                currentDeclarationLines = [];
-                currentBodyLines = [];
-                methodName = '';
-                braceCount = 0;
-            }
-        }
-    }
+					insideMethod = false;
+					foundOpenBrace = false;
+					startLine = -1;
+					currentDeclarationLines = [];
+					methodName = "";
+					braceCount = 0;
+				}
+			}
 
-    return functionBlocks;
+			// If the line ends with a semicolon and no brace, it's an abstract/interface method
+			if (!foundOpenBrace && trimmed.endsWith(";")) {
+				functionBlocks.push({
+					startLine,
+					endLine: i,
+					methodName,
+					declarationBlock: currentDeclarationLines.join("\n"),
+					bodyContent: "",
+				});
+
+				insideMethod = false;
+				foundOpenBrace = false;
+				startLine = -1;
+				currentDeclarationLines = [];
+				methodName = "";
+				braceCount = 0;
+			}
+
+			continue;
+		}
+
+		// Inside the method body (past the opening brace)
+		if (insideMethod && foundOpenBrace) {
+			currentBodyLines.push(lines[i]);
+
+			braceCount += (trimmed.match(/{/g) || []).length;
+			braceCount -= (trimmed.match(/}/g) || []).length;
+
+			if (braceCount <= 0) {
+				functionBlocks.push({
+					startLine,
+					endLine: i,
+					methodName,
+					declarationBlock: currentDeclarationLines.join("\n"),
+					bodyContent: currentBodyLines.join("\n"),
+				});
+
+				insideMethod = false;
+				foundOpenBrace = false;
+				startLine = -1;
+				currentDeclarationLines = [];
+				currentBodyLines = [];
+				methodName = "";
+				braceCount = 0;
+			}
+		}
+	}
+
+	return functionBlocks;
 }
 
 /**
@@ -126,91 +180,91 @@ function extractFunctions(fileContent) {
  * }}
  */
 function extractClassBlock(fileContent) {
-    const lines = fileContent.split('\n');
-    let insideBlockComment = false;
-    let declarationStartLine = -1;
-    let declarationEndLine = -1;
-    let braceCount = 0;
-    let insideClass = false;
-    const declarationLines = [];
-    const bodyLines = [];
+	const lines = fileContent.split("\n");
+	let insideBlockComment = false;
+	let declarationStartLine = -1;
+	let declarationEndLine = -1;
+	let braceCount = 0;
+	let insideClass = false;
+	const declarationLines = [];
+	const bodyLines = [];
 
-    let i = 0;
-    // Detect block comment above class
-    while (i < lines.length) {
-        const trimmed = lines[i].trim();
-        if (trimmed.startsWith('/**')) {
-            insideBlockComment = true;
-        }
+	let i = 0;
+	// Detect block comment above class
+	while (i < lines.length) {
+		const trimmed = lines[i].trim();
+		if (trimmed.startsWith("/**")) {
+			insideBlockComment = true;
+		}
 
-        if (insideBlockComment && trimmed.endsWith('*/')) {
-            insideBlockComment = false;
-            i++; // Move past the comment block
-            continue;
-        }
+		if (insideBlockComment && trimmed.endsWith("*/")) {
+			insideBlockComment = false;
+			i++; // Move past the comment block
+			continue;
+		}
 
-        if (!insideBlockComment && /\b(class|interface|enum)\b/.test(trimmed)) {
-            declarationStartLine = i;
-            break;
-        }
+		if (!insideBlockComment && /\b(class|interface|enum)\b/.test(trimmed)) {
+			declarationStartLine = i;
+			break;
+		}
 
-        i++;
-    }
+		i++;
+	}
 
-    // Now capture the class declaration (including decorators)
-    let j = declarationStartLine;
-    while (j < lines.length) {
-        const trimmed = lines[j].trim();
-        if (trimmed.startsWith('@')) {
-            declarationLines.push(lines[j]);
-            j++;
-            continue;
-        }
+	// Now capture the class declaration (including decorators)
+	let j = declarationStartLine;
+	while (j < lines.length) {
+		const trimmed = lines[j].trim();
+		if (trimmed.startsWith("@")) {
+			declarationLines.push(lines[j]);
+			j++;
+			continue;
+		}
 
-        if (/\b(class|interface|enum)\b/.test(trimmed)) {
-            declarationLines.push(lines[j]);
-            j++;
-            insideClass = true;
-            break;
-        }
+		if (/\b(class|interface|enum)\b/.test(trimmed)) {
+			declarationLines.push(lines[j]);
+			j++;
+			insideClass = true;
+			break;
+		}
 
-        break; // Shouldn't happen, but safety
-    }
+		break; // Shouldn't happen, but safety
+	}
 
-    // Capture the body
-    for (; j < lines.length; j++) {
-        const trimmed = lines[j].trim();
-        bodyLines.push(lines[j]);
-        braceCount += (trimmed.match(/{/g) || []).length;
-        braceCount -= (trimmed.match(/}/g) || []).length;
+	// Capture the body
+	for (; j < lines.length; j++) {
+		const trimmed = lines[j].trim();
+		bodyLines.push(lines[j]);
+		braceCount += (trimmed.match(/{/g) || []).length;
+		braceCount -= (trimmed.match(/}/g) || []).length;
 
-        if (braceCount === 0) {
-            declarationEndLine = j;
-            break;
-        }
-    }
+		if (braceCount === 0) {
+			declarationEndLine = j;
+			break;
+		}
+	}
 
-    if (declarationStartLine === -1) {
-        throw new Error('❌ No class declaration found.');
-    }
+	if (declarationStartLine === -1) {
+		throw new Error("❌ No class declaration found.");
+	}
 
-    return {
-        startLine: declarationStartLine,
-        endLine: declarationEndLine,
-        declarationBlock: declarationLines.join('\n'),
-        bodyContent: bodyLines.join('\n')
-    };
+	return {
+		startLine: declarationStartLine,
+		endLine: declarationEndLine,
+		declarationBlock: declarationLines.join("\n"),
+		bodyContent: bodyLines.join("\n"),
+	};
 }
 
 /**
  * Extracts the method name from a method signature line.
  */
 function extractMethodName(signatureLine) {
-    const match = signatureLine.match(/\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/);
-    return match ? match[1] : 'unknownMethod';
+	const match = signatureLine.match(/\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/);
+	return match ? match[1] : "unknownMethod";
 }
 
 module.exports = {
-    extractFunctions,
-	extractClassBlock
+	extractFunctions,
+	extractClassBlock,
 };

@@ -4,7 +4,7 @@ const path = require("path");
 const { spawn } = require("child_process");
 
 const baseTheme = "markdown8";
-const { markdown } = require("markdown");
+const { marked } = require("marked");
 
 // Logging utility
 let BASE_DIR = path.resolve(__dirname);
@@ -138,7 +138,7 @@ async function processMarkdownRecursively(markdownDir, htmlDir) {
 			const htmlFilePath = itemHtmlPath.replace(/\.md$/, ".html");
 			try {
 				const input = fs.readFileSync(itemPath, "utf-8");
-				const htmlBody = markdown.toHTML(input);
+				const htmlBody = marked.parse(input);
 				const fullHtml = `
 					<!DOCTYPE html>
 					<html>
@@ -174,7 +174,9 @@ function fixHtml(directory) {
 				.replaceAll("<body>", `<body><link rel="stylesheet" type="text/css" href="${baseTheme}.css" id="_theme"><div id="_html" class="markdown-body">` + injectStylePicker(baseTheme))
 				.replaceAll("</body>", "</div></body>")
 				.replaceAll('<h2 id="layout-default">layout: default</h2>', "")
-				.replaceAll('href="/', 'href="');
+				.replaceAll('href="/', 'href="')
+				.replace(/href="([^"]*)"/g, (match, url) => `href="${url.replace(/\\/g, "/").replace(/%5[cC]/g, "/")}"`)
+				.replace(/src="([^"]*)"/g, (match, url) => `src="${url.replace(/\\/g, "/").replace(/%5[cC]/g, "/")}"`);
 			fs.writeFileSync(fileName, unescapeHTML(newFile));
 			logEvent(`HTML fixed for file: ${fileName}`);
 		} catch (err) {
